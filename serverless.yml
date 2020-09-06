@@ -1,0 +1,53 @@
+service: monitoring-stack
+
+# Create an optimized package for our functions
+package:
+  individually: true
+
+plugins:
+  - serverless-bundle
+  - serverless-iam-roles-per-function
+custom:
+  serverless-iam-roles-per-function:
+    defaultInherit: true
+
+provider:
+  name: aws
+  runtime: nodejs12.x
+
+functions:
+  subscriber:
+    handler: subscriber/index.main
+    iamRoleStatements:
+      - Effect: Allow
+        Action:
+          - logs:PutSubscriptionFilter
+        Resource: '*'
+    environment:
+      ALERTER_LAMBDA: !GetAtt AlerterLambdaFunction.Arn
+    events:
+      - cloudwatchEvent:
+          event:
+            source:
+              - "aws.tag"
+            detail-type:
+              - "Tag Change on Resource"
+            detail:
+              service:
+                - lambda
+              resource-type:
+                - function
+  alerter:
+    handler: alerter/index.main
+    environment:
+      SLACK_WEBHOOK_URL: TC090E8U8/B01AVHXC5PS/KjnGPHKyYEyjBN4UscG4FjDN
+
+resources:
+  Resources:
+    CloudwatchPermissionForAlerter:
+      Type: "AWS::Lambda::Permission"
+      Properties:
+        Action: lambda:InvokeFunction
+        FunctionName:
+          Ref: AlerterLambdaFunction
+        Principal: "logs.amazonaws.com"
