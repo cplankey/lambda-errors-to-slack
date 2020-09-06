@@ -7,50 +7,84 @@ AWS.config.update({
 const cloudwatchlogs = new AWS.CloudWatchLogs();
 export async function main(event, context) {
     console.log(JSON.stringify(event));
-    var detail = event.detail;
+    const detail = event.detail;
+    const resourceSplit = event.resources[0].split(':');
+    const functionName = [resourceSplit[resourceSplit.length - 1]];
 
-    // no action if this event is not about ec2 instance
+    // no action if this event is not about a lambda function
     if (!(detail["service"] === "lambda" && detail["resource-type"] === "function")) return;
 
-    var tags = detail["tags"];
+    const tags = detail["tags"];
 
     console.log(tags);
 
     // if associated tags not contain the expected tag pair
     if (!tags.hasOwnProperty("monitoring") || JSON.parse(tags["monitoring"]) !== true) {
+        //either lambda does not have monitoring tag, user removed monitoring tag, or monitoring tag is set to false
         console.log("This function does not have the monitoring tag or tag is not set to true");
-        //remove log group subscription if exists and is the subscribing lambda
-    } else{
+        //check if log group has subscription matching subscriber
+        let params = {
+            logGroupName: `/aws/lambda/${functionName}`,
+            /* required */
+        };
+        let describeSubscriptionFiltersResult;
+        try {
+            describeSubscriptionFiltersResult = await cloudwatchlogs.describeSubscriptionFilters(params).promise();
+        } catch (err) {
+            console.log('Unable to describe subscription filters');
+            //dont throw so we can try removing the log subscription just in case it is there
+        }
+        if (describeSubscriptionFiltersResult.subscriptionFilters) {
+            let removeParams;
+            describeSubscriptionFiltersResult.subscriptionFilters.forEach(subscription => {
+                if (subscription.destinationArn === process.env.ALERTER_LAMBDA) {
+                    //alerter lambda is subscribed, need to remove
+                    console.log("The function is subscribed to by the alerter lambda, need to remove");
+                    removeParams = {
+                        filterName: subscription.filterName,
+                        logGroupName: `/aws/lambda/${functionName}`
+                    };
+                }
+            });
+            if (removeParams) {
+                try{
+                    await cloudwatchlogs.deleteSubscriptionFilter(removeParams).promise();
+                }catch(err){
+                    console.log(err);
+                    throw err;
+                }
+            }
+        } else {
+            console.log("The function has no subscription filters");
+        }
+    } else {
         console.log(`Need to subscribe to ${event.resources[0]}`);
-        var resourceSplit = event.resources[0].split(':');
-        let functionName = [resourceSplit[resourceSplit.length - 1]];
-        var params = {
-            destinationArn: process.env.ALERTER_LAMBDA, /* required */
-            filterName: 'alerter-lambda', /* required */
-            filterPattern: '?"Error: Runtime exited" ?"Task timed out after" ?"\tERROR\t" ?"\\"level\\":\\"error\\""', /* required */
-            logGroupName: `/aws/lambda/${functionName}`, /* required */
+        let params = {
+            destinationArn: process.env.ALERTER_LAMBDA,
+            /* required */
+            filterName: 'alerter-lambda',
+            /* required */
+            filterPattern: '?"Error: Runtime exited" ?"Task timed out after" ?"\tERROR\t" ?"\\"level\\":\\"error\\""',
+            /* required */
+            logGroupName: `/aws/lambda/${functionName}`,
+            /* required */
             distribution: 'ByLogStream'
-          };
-          let putSubscriptionResponse;
-          try{
-            putSubscriptionResponse = await  cloudwatchlogs.putSubscriptionFilter(params).promise();
-          } catch (err) {
-              console.log(err);
-          }
-          console.log(putSubscriptionResponse);
+        };
+        try {
+            await cloudwatchlogs.putSubscriptionFilter(params).promise();
+        } catch (err) {
+            console.log(err);
+            throw err;
+        }
 
     }
-return {
-    statusCode: 200,
-    body: JSON.stringify({
-            message: 'Go Serverless v1.0! Your function executed successfully!',
-            input: event,
-        },
-        null,
-        2
-    ),
-};
-
-// Use this code if you don't use the http event with the LAMBDA-PROXY integration
-// return { message: 'Go Serverless v1.0! Your function executed successfully!', event };
+    return {
+        statusCode: 200,
+        body: JSON.stringify({
+                message: 'Success'
+            },
+            null,
+            2
+        ),
+    };
 };

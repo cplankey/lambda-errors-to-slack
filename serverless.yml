@@ -22,6 +22,8 @@ functions:
       - Effect: Allow
         Action:
           - logs:PutSubscriptionFilter
+          - logs:DescribeSubscriptionFilters
+          - logs:DeleteSubscriptionFilter
         Resource: '*'
     environment:
       ALERTER_LAMBDA: !GetAtt AlerterLambdaFunction.Arn
