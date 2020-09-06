@@ -1,9 +1,6 @@
 // Load the SDK for JavaScript
 var AWS = require('aws-sdk');
-// Set the region
-AWS.config.update({
-    region: 'us-east-1'
-});
+
 const cloudwatchlogs = new AWS.CloudWatchLogs();
 export async function main(event, context) {
     console.log(JSON.stringify(event));
