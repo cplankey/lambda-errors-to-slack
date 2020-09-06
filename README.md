@@ -18,9 +18,6 @@ The subscriber lambda is invoked any time you update tags on a Lambda function. 
 
 ### Alerter
 This lambda is invoked by Cloudwatch Logs when a lambda with the `monitoring` tag writes logs. This lambda then parses the log event to find out if it is a function error or a `console.error()`. It then relays this information to a specified slack channel.
-#### To Do:
-
- 1. Test timeouts
 
 ## Configuring Slack Settings
 
